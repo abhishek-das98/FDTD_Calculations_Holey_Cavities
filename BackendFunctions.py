@@ -30,70 +30,94 @@ def gaussian_far_field_no_polarization(theta, phi, NA, n=1.0):
 
 def compute_gaussian_overlap_without_pol(
         phi, theta, vals, 
-        NA = 0.68, n = 1.0
+        NA = 0.68, n = 1.0,
+        theta_max_deg = None  
 ):
     """
-    Compute the overlap between the simulated and ideal Gaussian beam profiles.
-    --------------------------------------------------------------------------
-    Overlap Equation (standard mode overlap definition for scalar fields):
-    
-                    | ∫ E_sim(theta,phi) E_gauss(theta,phi) dOmega |^2
-        eta   =  -------------------------------------------------------------
-                 ∫ |E_sim(theta,phi)|^2 dOmega  ∫ |E_gauss(theta,phi)|^2 dOmega
+    Compute the mode-overlap between the simulated far-field intensity (vals)
+    and an ideal Gaussian far-field WITHOUT polarization effects.
 
-    where:
-        - E_sim(theta,phi)   : simulated amplitude of the far-field, calculated by taking the square-root of the intensity
-        - E_gauss      : ideal Gaussian far-field amplitude (In our case, a real value)
-        - dOmega = sin(theta) dtheta dphi is the solid-angle measure
-        - η is a normalized power overlap between 0 and 1
+    Overlap is computed as:
+        |∫ E_sim E_gauss dΩ|^2 / ( ∫|E_sim|^2 dΩ  ∫|E_gauss|^2 dΩ )
 
-    Parameters:
+    Added FEATURE:
+        If theta_max_deg is provided (in degrees), the integrals are evaluated
+        ONLY for theta <= theta_max_deg.
+
+    Parameters
+    ----------
     phi, theta : 1D arrays (rad)
-        Input angular coordinates
-    NA, n : float 
-        Numerical aperture and refractive index (of air)
-    Returns:
+        Angular sampling coordinates of the simulated far-field.
+    vals : 2D array
+        Simulated intensity map, shape = (len(theta), len(phi)).
+    NA, n : floats
+        Gaussian beam NA and refractive index.
+    theta_max_deg : float or None
+        Upper limit of theta (in degrees) for restricting the overlap region.
+        If None → use entire theta-domain.
+
+    Returns
+    -------
     percentage_overlap : float
-        Percentage overlap between simulated and ideal Gaussian beam profiles
+        Mode overlap (0–100%).
     """
+
+    # Convert inputs to arrays
     phi   = np.asarray(phi)
     theta = np.asarray(theta)
     vals  = np.asarray(vals)
-    assert vals.shape == (len(theta), len(phi))
 
-    
-    # Generate the ideal Gaussian far-field pattern, with a certain NA
+    assert vals.shape == (len(theta), len(phi)), \
+        f"vals has shape {vals.shape}, but expected {(len(theta), len(phi))}"
+
+    # Build ideal Gaussian amplitude and its intensity
     E_gauss = gaussian_far_field_no_polarization(theta, phi, NA, n)
     I_gauss = E_gauss**2
 
-    # Simulated intensity is given. Convert to field amplitude
-    # We shall discard the phase information from the amplitude
+    # Sim amplitude = sqrt(intensity)
     I_sim = vals
     E_sim = np.sqrt(I_sim)
-    
-    # Build the solid-angle grid
+
+    # Meshgrid for solid-angle element
     theta_grid, phi_grid = np.meshgrid(theta, phi, indexing='ij')
 
-    # Compute differential angle elements
+    # Solid angle element (assume uniform grid)
     dtheta = float(np.mean(np.diff(theta)))
     dphi   = float(np.mean(np.diff(phi)))
-
-    # Solid angle weighting
     dOmega = np.sin(theta_grid) * dtheta * dphi
 
-    # Compute the numerator
-    overlap = np.sum(E_sim * E_gauss * dOmega)
-    numerator   = np.abs(overlap)**2
+    # --------------------------------------
+    #  Mask to restrict region if requested
+    # --------------------------------------
+    if theta_max_deg is not None:
+        theta_max_rad = np.radians(theta_max_deg)
+        mask = theta_grid <= theta_max_rad
+    else:
+        mask = np.ones_like(theta_grid, dtype=bool)
 
-    # Compute the denominator
-    norm_sim    = np.sum(I_sim   * dOmega)
-    norm_gauss  = np.sum(I_gauss * dOmega)
+    # Apply mask
+    E_sim_m   = E_sim[mask]
+    E_gauss_m = E_gauss[mask]
+    I_sim_m   = I_sim[mask]
+    I_gauss_m = I_gauss[mask]
+    dOmega_m  = dOmega[mask]
+
+    # --------------------------
+    #  Mode overlap numerator
+    # --------------------------
+    overlap = np.sum(E_sim_m * E_gauss_m * dOmega_m)
+    numerator = np.abs(overlap)**2
+
+    # --------------------------
+    #  Normalization denominator
+    # --------------------------
+    norm_sim   = np.sum(I_sim_m   * dOmega_m)
+    norm_gauss = np.sum(I_gauss_m * dOmega_m)
     denominator = norm_sim * norm_gauss
 
-    # overlap efficiency and percentage
-    eta = numerator / denominator
-    percentage_overlap = float(100 * eta)
-    return percentage_overlap
+    eta = numerator / denominator if denominator > 0 else 0.0
+    return float(100 * eta)
+
 
 def make_far_field_plot_without_pol(phi, theta, vals, NA = 0.68, n=1.0, 
                                     basename = "Inverse_Design_Holey_Cavity_Far_Field_Overlap_cal_Unolarized", 
