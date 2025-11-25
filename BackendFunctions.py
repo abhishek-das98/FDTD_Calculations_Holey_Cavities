@@ -202,7 +202,6 @@ def intensity_overlap(I1, I2, theta, phi, theta_max_deg=None):
         Overlap between the intensity patterns.
         1   → intensities identical up to a scale factor
         0   → no correlation
-        <0  → negatively correlated
     """
 
     # Convert inputs to arrays
