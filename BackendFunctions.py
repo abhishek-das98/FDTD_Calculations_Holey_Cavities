@@ -175,14 +175,14 @@ def make_far_field_plot_without_pol(phi, theta, vals, NA = 0.68, n=1.0,
     plt.show()
     return
 
-def intensity_overlap(I1, I2, theta, phi, NA=None, n=1.0):
+def intensity_overlap(I1, I2, theta, phi, theta_max_deg=None):
     """
     Compute the overlap between TWO intensity patterns
     over the theta-phi region, using solid-angle weighting.
 
-    If NA is provided, the overlap is computed only for
-    theta <= arcsin(NA / n). If NA is None, the full
-    theta range is used.
+    If theta_max_deg is provided, the overlap is computed only for
+    theta <= theta_max_deg (in degrees). If theta_max_deg is None,
+    the full theta range is used.
 
     Parameters
     ----------
@@ -190,13 +190,11 @@ def intensity_overlap(I1, I2, theta, phi, NA=None, n=1.0):
         Intensity maps with shape (len(theta), len(phi)).
     theta, phi : 1D arrays (rad)
         Angular coordinates.
-        theta = polar angle,
+        theta = polar angle (0 = optical axis),
         phi   = azimuthal angle.
-    NA : float or None, optional
-        Numerical aperture. If not None, restricts the
-        overlap to theta <= arcsin(NA / n).
-    n : float, optional
-        Refractive index used with NA (default 1.0).
+    theta_max_deg : float or None, optional
+        Upper limit of theta (in degrees) for restricting the overlap.
+        If None, the entire theta-domain is used.
 
     Returns
     -------
@@ -208,12 +206,12 @@ def intensity_overlap(I1, I2, theta, phi, NA=None, n=1.0):
     """
 
     # Convert inputs to arrays
-    I1 = np.asarray(I1)
-    I2 = np.asarray(I2)
+    I1    = np.asarray(I1)
+    I2    = np.asarray(I2)
     theta = np.asarray(theta)
     phi   = np.asarray(phi)
 
-    # Ensure shapes match exactly the expected grid structure
+    # Ensure shapes match the expected grid structure
     assert I1.shape == I2.shape == (len(theta), len(phi)), \
         f"Intensity shapes must match (len(theta), len(phi)). Got {I1.shape} and {I2.shape}."
 
@@ -231,10 +229,10 @@ def intensity_overlap(I1, I2, theta, phi, NA=None, n=1.0):
     # By default, use all points
     mask = np.ones_like(theta_grid, dtype=bool)
 
-    # If an NA is given, restrict to theta <= theta_max
-    if NA is not None:
-        theta_max = np.arcsin(min(NA / float(n), 1.0))  # clamp argument to [-1,1]
-        mask = theta_grid <= theta_max
+    # If a theta_max is given (in degrees), restrict to theta <= theta_max
+    if theta_max_deg is not None:
+        theta_max_rad = np.radians(theta_max_deg)
+        mask = theta_grid <= theta_max_rad
 
     # Apply mask to intensities and weights
     I1_m = I1[mask]
@@ -247,4 +245,5 @@ def intensity_overlap(I1, I2, theta, phi, NA=None, n=1.0):
 
     overlap = numerator / denominator if denominator != 0 else 0.0
     return float(overlap)
+
 
