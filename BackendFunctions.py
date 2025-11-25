@@ -38,7 +38,7 @@ def compute_gaussian_overlap_without_pol(
     and an ideal Gaussian far-field WITHOUT polarization effects.
 
     Overlap is computed as:
-        |∫ E_sim E_gauss dΩ|^2 / ( ∫|E_sim|^2 dΩ  ∫|E_gauss|^2 dΩ )
+        |∫ E_sim E_gauss dOmega|^2 / ( ∫|E_sim|^2 dOmega  ∫|E_gauss|^2 dOmega )
 
     Added FEATURE:
         If theta_max_deg is provided (in degrees), the integrals are evaluated
