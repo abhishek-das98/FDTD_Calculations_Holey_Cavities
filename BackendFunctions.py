@@ -150,3 +150,77 @@ def make_far_field_plot_without_pol(phi, theta, vals, NA = 0.68, n=1.0,
         fig1.savefig(fn, dpi=300, bbox_inches='tight')
     plt.show()
     return
+
+def intensity_overlap(I1, I2, theta, phi, NA=None, n=1.0):
+    """
+    Compute the overlap between TWO intensity patterns
+    over the theta-phi region, using solid-angle weighting.
+
+    If NA is provided, the overlap is computed only for
+    theta <= arcsin(NA / n). If NA is None, the full
+    theta range is used.
+
+    Parameters
+    ----------
+    I1, I2 : 2D arrays
+        Intensity maps with shape (len(theta), len(phi)).
+    theta, phi : 1D arrays (rad)
+        Angular coordinates.
+        theta = polar angle,
+        phi   = azimuthal angle.
+    NA : float or None, optional
+        Numerical aperture. If not None, restricts the
+        overlap to theta <= arcsin(NA / n).
+    n : float, optional
+        Refractive index used with NA (default 1.0).
+
+    Returns
+    -------
+    overlap : float
+        Overlap between the intensity patterns.
+        1   → intensities identical up to a scale factor
+        0   → no correlation
+        <0  → negatively correlated
+    """
+
+    # Convert inputs to arrays
+    I1 = np.asarray(I1)
+    I2 = np.asarray(I2)
+    theta = np.asarray(theta)
+    phi   = np.asarray(phi)
+
+    # Ensure shapes match exactly the expected grid structure
+    assert I1.shape == I2.shape == (len(theta), len(phi)), \
+        f"Intensity shapes must match (len(theta), len(phi)). Got {I1.shape} and {I2.shape}."
+
+    # Build 2D angular grids for solid-angle weighting
+    # indexing='ij' → first index = theta, second index = phi
+    theta_grid, phi_grid = np.meshgrid(theta, phi, indexing='ij')
+
+    # Compute dθ and dφ (assumed uniform grids)
+    dtheta = float(np.mean(np.diff(theta)))
+    dphi   = float(np.mean(np.diff(phi)))
+
+    # Solid angle element dΩ = sin(θ) dθ dφ
+    w = np.sin(theta_grid) * dtheta * dphi
+
+    # By default, use all points
+    mask = np.ones_like(theta_grid, dtype=bool)
+
+    # If an NA is given, restrict to theta <= theta_max
+    if NA is not None:
+        theta_max = np.arcsin(min(NA / float(n), 1.0))  # clamp argument to [-1,1]
+        mask = theta_grid <= theta_max
+
+    # Apply mask to intensities and weights
+    I1_m = I1[mask]
+    I2_m = I2[mask]
+    w_m  = w[mask]
+
+    # Weighted cosine similarity between intensities
+    numerator   = np.sum(I1_m * I2_m * w_m)
+    denominator = np.sqrt(np.sum(I1_m**2 * w_m) * np.sum(I2_m**2 * w_m))
+
+    overlap = numerator / denominator if denominator != 0 else 0.0
+    return float(overlap)
+
