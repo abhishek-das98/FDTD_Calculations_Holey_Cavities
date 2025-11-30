@@ -246,3 +246,110 @@ def intensity_overlap(I1, I2, theta, phi, theta_max_deg=None):
     return float(overlap)
 
 
+def gaussian_overlap_density_without_pol(
+        phi, theta, vals, 
+        NA = 0.68, n = 1.0,
+        theta_max_deg = None  
+):
+    """
+    Real, non-negative overlap density:
+        A(theta,phi) = E_sim * E_gauss * dΩ / sqrt(norm_sim * norm_gauss)
+    on the (theta, phi) grid.
+    """
+    phi   = np.asarray(phi)
+    theta = np.asarray(theta)
+    vals  = np.asarray(vals)
+
+    assert vals.shape == (len(theta), len(phi)), \
+        f"vals has shape {vals.shape}, expected {(len(theta), len(phi))}"
+
+    # Ideal Gaussian amplitude & intensity
+    E_gauss = gaussian_far_field_no_polarization(theta, phi, NA, n)
+    I_gauss = E_gauss**2
+
+    # Simulated amplitude (from intensity)
+    I_sim = vals
+    E_sim = np.sqrt(I_sim)
+
+    # Meshgrid
+    theta_grid, phi_grid = np.meshgrid(theta, phi, indexing='ij')
+
+    dtheta = float(np.mean(np.diff(theta)))
+    dphi   = float(np.mean(np.diff(phi)))
+    dOmega = np.sin(theta_grid) * dtheta * dphi
+
+    # Region mask in theta
+    if theta_max_deg is not None:
+        theta_max_rad = np.radians(theta_max_deg)
+        mask = theta_grid <= theta_max_rad
+    else:
+        mask = np.ones_like(theta_grid, dtype=bool)
+
+    norm_sim   = np.sum(I_sim[mask]   * dOmega[mask])
+    norm_gauss = np.sum(I_gauss[mask] * dOmega[mask])
+    denom = np.sqrt(norm_sim * norm_gauss)
+
+    A_density = np.zeros_like(vals, dtype=float)
+    if denom > 0:
+        A_density[mask] = (E_sim[mask] * E_gauss[mask] * dOmega[mask]) / denom
+
+    return theta_grid, phi_grid, A_density
+
+def plot_overlap_density(
+        phi, theta, vals,
+        NA = 0.68, n = 1.0,
+        theta_max_deg = 90.0,
+        cmap = 'viridis',
+        vmin = None, vmax = None,
+        show_colorbar = True
+):
+    """
+    Pure polar plot: radius = theta (0–theta_max_deg), angle = phi.
+    """
+
+    # Compute overlap density on (theta, phi)
+    theta_grid, phi_grid, A_density = gaussian_overlap_density_without_pol(
+        phi, theta, vals, NA=NA, n=n, theta_max_deg=theta_max_deg
+    )
+
+    # Mask outside desired theta range (for safety)
+    theta_max_rad = np.radians(theta_max_deg)
+    A_plot = np.array(A_density, copy=True)
+    A_plot[theta_grid > theta_max_rad] = np.nan
+
+    # Polar plot
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(6, 6))
+
+    # pcolormesh expects angle, radius, Z
+    pc = ax.pcolormesh(
+        phi_grid, theta_grid, A_plot,
+        shading='auto', cmap=cmap, vmin=vmin, vmax=vmax
+    )
+
+    # Radius (theta) from 0 to theta_max
+    ax.set_ylim(0, theta_max_rad)
+
+    # Radial ticks in degrees (like your far-field plot)
+    r_ticks_deg = np.arange(0, theta_max_deg + 10, 10)  # 0,10,...,90
+    ax.set_yticks(np.radians(r_ticks_deg))
+    ax.set_yticklabels([f'{d:.0f}' for d in r_ticks_deg])
+
+    # (Optional) NA circle overlay
+    theta_NA = np.arcsin(NA / n)
+    if theta_NA < theta_max_rad:
+        ax.plot(np.linspace(0, 2*np.pi, 512),
+                np.full(512, theta_NA),
+                '--', color='white', linewidth=2)
+        ax.text(0.05, theta_NA + np.radians(2),
+                f'NA={NA:.2f}, n={n:.1f}',
+                color='white', fontsize=10,
+                ha='left', va='bottom')
+
+    ax.set_title('Overlap Density: Gaussian Mode', fontsize=13)
+
+    if show_colorbar:
+        cbar = fig.colorbar(pc, ax=ax, pad=0.1)
+        cbar.set_label('Normalized Overlap Density')
+
+    plt.tight_layout()
+    plt.show()
